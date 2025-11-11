@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Speed Test - Upload & Download</title>
+<style>
+  body {
+    margin: 0;
+    font-family: "Poppins", sans-serif;
+    background: radial-gradient(circle at top, #0f172a, #020617);
+    color: #e2e8f0;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 20px;
+  }
+  h1 {
+    font-size: 24px;
+    margin-bottom: 10px;
+    color: #38bdf8;
+  }
+  .card {
+    background: rgba(255, 255, 255, 0.05);
+    backdrop-filter: blur(10px);
+    padding: 20px;
+    border-radius: 16px;
+    box-shadow: 0 0 20px rgba(0,0,0,0.4);
+    width: 100%;
+    max-width: 600px;
+  }
+  input, select {
+    width: 100%;
+    padding: 8px;
+    margin-top: 6px;
+    border-radius: 8px;
+    border: none;
+    background: rgba(255,255,255,0.1);
+    color: #fff;
+  }
+  button {
+    background: linear-gradient(90deg, #06b6d4, #3b82f6);
+    border: none;
+    border-radius: 8px;
+    color: #fff;
+    font-weight: 600;
+    cursor: pointer;
+    padding: 10px 16px;
+    margin: 5px;
+  }
+  button:hover {opacity: 0.9;}
+  .progress {
+    width: 100%;
+    height: 12px;
+    background: rgba(255,255,255,0.1);
+    border-radius: 8px;
+    overflow: hidden;
+    margin-top: 5px;
+  }
+  .bar {
+    height: 100%;
+    width: 0%;
+    background: linear-gradient(90deg, #06b6d4, #3b82f6);
+    transition: width 0.2s ease;
+  }
+  .result {
+    display: flex;
+    justify-content: space-around;
+    margin-top: 15px;
+  }
+  .result div {
+    background: rgba(255,255,255,0.05);
+    border-radius: 8px;
+    padding: 10px;
+    text-align: center;
+  }
+  footer {
+    margin-top: 20px;
+    color: #94a3b8;
+    font-size: 13px;
+  }
+</style>
+</head>
+<body>
+  <h1>📶 Internet Speed Test</h1>
+
+  <div class="card">
+    <label>Server URL:</label>
+    <input id="serverUrl" type="text" value="http://localhost:5000">
+
+    <label>Test File Size:</label>
+    <select id="fileSize">
+      <option value="2000000">2 MB</option>
+      <option value="5000000" selected>5 MB</option>
+      <option value="10000000">10 MB</option>
+    </select>
+
+    <div style="margin-top:15px;">
+      <button onclick="startTest()">Start Test</button>
+      <button onclick="copyResult()">Copy Result</button>
+    </div>
+
+    <h3>Download Speed</h3>
+    <div class="progress"><div id="dlBar" class="bar"></div></div>
+    <p id="dlInfo">Waiting...</p>
+
+    <h3>Upload Speed</h3>
+    <div class="progress"><div id="ulBar" class="bar"></div></div>
+    <p id="ulInfo">Waiting...</p>
+
+    <div class="result">
+      <div><b>Download</b><br><span id="dlSpeed">--</span> Mbps</div>
+      <div><b>Upload</b><br><span id="ulSpeed">--</span> Mbps</div>
+      <div><b>Latency</b><br><span id="latency">--</span> ms</div>
+    </div>
+  </div>
+
+  <footer>Made with ❤️ | Works on Mobile & Wi-Fi</footer>
+
+<script>
+async function startTest(){
+  const server = document.getElementById('serverUrl').value.trim().replace(/\/$/,'');
+  const size = parseInt(document.getElementById('fileSize').value);
+  if(!server){ alert('Please enter server URL'); return; }
+
+  document.getElementById('dlBar').style.width = '0%';
+  document.getElementById('ulBar').style.width = '0%';
+  document.getElementById('dlInfo').textContent = 'Starting download...';
+  document.getElementById('ulInfo').textContent = 'Waiting...';
+
+  // measure latency
+  let t0 = performance.now();
+  await fetch(server + "/download?size=1000");
+  let latency = (performance.now() - t0).toFixed(0);
+  document.getElementById("latency").textContent = latency;
+
+  // Download test
+  const t1 = performance.now();
+  let resp = await fetch(server + '/download?size=' + size);
+  const reader = resp.body.getReader();
+  let bytes = 0;
+  while(true){
+    const {done, value} = await reader.read();
+    if(done) break;
+    bytes += value.length;
+    document.getElementById('dlBar').style.width = Math.min(100, (bytes/size)*100) + '%';
+  }
+  const t2 = performance.now();
+  const dlSpeed = ((bytes*8)/(t2-t1)/1000).toFixed(2);
+  document.getElementById('dlSpeed').textContent = dlSpeed;
+  document.getElementById('dlInfo').textContent = 'Downloaded ' + (bytes/1e6).toFixed(2) + ' MB';
+
+  // Upload test
+  const uploadData = new Uint8Array(size);
+  crypto.getRandomValues(uploadData);
+  const u1 = performance.now();
+  await fetch(server + '/upload', {
+    method: 'POST',
+    body: uploadData
+  });
+  const u2 = performance.now();
+  const ulSpeed = ((size*8)/(u2-u1)/1000).toFixed(2);
+  document.getElementById('ulSpeed').textContent = ulSpeed;
+  document.getElementById('ulBar').style.width = '100%';
+  document.getElementById('ulInfo').textContent = 'Uploaded ' + (size/1e6).toFixed(2) + ' MB';
+
+  window.lastResult = {latency, download: dlSpeed, upload: ulSpeed};
+}
+
+function copyResult(){
+  if(!window.lastResult){alert('No result yet');return;}
+  const text = `Speed Test Result:\nLatency: ${lastResult.latency} ms\nDownload: ${lastResult.download} Mbps\nUpload: ${lastResult.upload} Mbps`;
+  navigator.clipboard.writeText(text);
+  alert('Result copied!');
+}
+</script>
+</body>
+</html>
